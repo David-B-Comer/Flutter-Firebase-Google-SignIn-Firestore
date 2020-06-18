@@ -35,3 +35,19 @@ class AuthService {
 }
 
 final AuthService authService = AuthService();
+
+AuthService() {
+  user = Observable(_auth.onAuthStateChanged);
+
+  profile = user.switchMap((FirebaseUser u) {
+    if (u != null) {
+      return _db
+          .collection('users')
+          .document(u.uid)
+          .snapshots()
+          .map((snap) => snap.data);
+    } else {
+      return Observable.just({});
+    }
+  });
+}
