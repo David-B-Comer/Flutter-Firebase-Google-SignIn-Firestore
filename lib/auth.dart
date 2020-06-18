@@ -51,3 +51,40 @@ AuthService() {
     }
   });
 }
+
+Future<FirebaseUser> googleSignIn() async {
+  // Start
+  loading.add(true);
+
+  // Step 1
+  GoogleSignInAccount googleUser = await _googleSignIn.signIn();
+
+  // Step 2
+  GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+  FirebaseUser user = await _auth.signInWithGoogle(
+      accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
+
+  // Step 3
+  updateUserData(user);
+
+  // Done
+  loading.add(false);
+  print("signed in " + user.displayName);
+  return user;
+}
+
+void updateUserData(FirebaseUser user) async {
+  DocumentReference ref = _db.collection('users').document(user.uid);
+
+  return ref.setData({
+    'uid': user.uid,
+    'email': user.email,
+    'photoURL': user.photoUrl,
+    'displayName': user.displayName,
+    'lastSeen': DateTime.now()
+  }, merge: true);
+}
+
+void signOut() {
+  _auth.signOut();
+}
