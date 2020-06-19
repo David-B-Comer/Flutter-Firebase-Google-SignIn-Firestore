@@ -4,87 +4,76 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:rxdart/rxdart.dart';
 
 class AuthService {
-  // Dependencies
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Firestore _db = Firestore.instance;
 
-  // Shared State for Widgets
   Observable<FirebaseUser> user; // firebase user
   Observable<Map<String, dynamic>> profile; // custom user data in Firestore
   PublishSubject loading = PublishSubject();
 
   // constructor
   AuthService() {
+    user = Observable(_auth.onAuthStateChanged);
 
+    profile = user.switchMap((FirebaseUser u) {
+      if (u != null) {
+        return _db
+            .collection('users')
+            .document(u.uid)
+            .snapshots()
+            .map((snap) => snap.data);
+      } else {
+        return Observable.just({});
+      }
+    });
   }
 
   Future<FirebaseUser> googleSignIn() async {
+    try {
+      loading.add(true);
+      GoogleSignInAccount googleSignInAccount = await _googleSignIn.signIn();
+      GoogleSignInAuthentication googleAuth =
+      await googleSignInAccount.authentication;
 
+      final AuthCredential credential = GoogleAuthProvider.getCredential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      FirebaseUser user = await _auth.signInWithCredential(credential);
+      updateUserData(user);
+      print("user name: ${user.displayName}");
+
+      loading.add(false);
+      return user;
+    } catch (error) {
+      return error;
+    }
   }
 
   void updateUserData(FirebaseUser user) async {
+    DocumentReference ref = _db.collection('users').document(user.uid);
 
-
+    return ref.setData({
+      'uid': user.uid,
+      'email': user.email,
+      'photoURL': user.photoUrl,
+      'displayName': user.displayName,
+      'lastSeen': DateTime.now()
+    }, merge: true);
   }
 
-
-  void signOut() {
-
-  }
-}
-
-final AuthService authService = AuthService();
-
-AuthService() {
-  user = Observable(_auth.onAuthStateChanged);
-
-  profile = user.switchMap((FirebaseUser u) {
-    if (u != null) {
-      return _db
-          .collection('users')
-          .document(u.uid)
-          .snapshots()
-          .map((snap) => snap.data);
-    } else {
-      return Observable.just({});
+  Future<String> signOut() async {
+    try {
+      await _auth.signOut();
+      return 'SignOut';
+    } catch (e) {
+      return e.toString();
     }
-  });
+  }
+
 }
 
-Future<FirebaseUser> googleSignIn() async {
-  // Start
-  loading.add(true);
-
-  // Step 1
-  GoogleSignInAccount googleUser = await _googleSignIn.signIn();
-
-  // Step 2
-  GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-  FirebaseUser user = await _auth.signInWithGoogle(
-      accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
-
-  // Step 3
-  updateUserData(user);
-
-  // Done
-  loading.add(false);
-  print("signed in " + user.displayName);
-  return user;
-}
-
-void updateUserData(FirebaseUser user) async {
-  DocumentReference ref = _db.collection('users').document(user.uid);
-
-  return ref.setData({
-    'uid': user.uid,
-    'email': user.email,
-    'photoURL': user.photoUrl,
-    'displayName': user.displayName,
-    'lastSeen': DateTime.now()
-  }, merge: true);
-}
-
-void signOut() {
-  _auth.signOut();
-}
+// TODO refactor global to InheritedWidget
+final AuthService authService = AuthService();
